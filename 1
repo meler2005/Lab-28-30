@@ -1,0 +1,131 @@
+Завдання 1: Процедура для видачі інформації про стан зайнятості на поточну дату номерів готелю
+
+DELIMITER $$
+CREATE PROCEDURE GetHotelOccupancy(IN hotelName VARCHAR(255))
+BEGIN
+    SELECT r.room_id, r.room_number, r.room_type, 
+           IF(res.reservation_id IS NULL, 'Available', 'Occupied') AS status
+    FROM rooms r
+    JOIN hotels h ON r.hotel_id = h.hotel_id
+    LEFT JOIN reservations res ON r.room_id = res.room_id
+                                AND CURDATE() BETWEEN res.check_in_date AND res.check_out_date
+    WHERE h.hotel_name = hotelName;
+END$$
+DELIMITER ;
+
+
+
+
+
+Завдання 2: Процедура для реєстрації нового гостя
+
+DELIMITER $$
+CREATE PROCEDURE RegisterNewGuest(
+    IN firstName VARCHAR(255), 
+    IN lastName VARCHAR(255), 
+    IN email VARCHAR(255)
+)
+BEGIN
+    INSERT INTO guests (first_name, last_name, email) 
+    VALUES (firstName, lastName, email);
+END$$
+DELIMITER ;
+
+
+
+
+
+Завдання 3: Процедура для фіксації поселення гостей в готелі
+
+DELIMITER $$
+CREATE PROCEDURE CheckInGuest(
+    IN guestID INT, 
+    IN roomID INT, 
+    IN checkInDate DATE, 
+    IN checkOutDate DATE
+)
+BEGIN
+    INSERT INTO reservations (guest_id, room_id, check_in_date, check_out_date) 
+    VALUES (guestID, roomID, checkInDate, checkOutDate);
+END$$
+DELIMITER ;
+
+
+
+
+
+Завдання 4: Процедура для бронювання номерів в готелі
+
+DELIMITER $$
+CREATE PROCEDURE BookRoom(
+    IN guestID INT, 
+    IN hotelID INT, 
+    IN roomNumber VARCHAR(50), 
+    IN checkInDate DATE, 
+    IN checkOutDate DATE
+)
+BEGIN
+    DECLARE roomID INT;
+    SELECT r.room_id 
+    INTO roomID 
+    FROM rooms r
+    JOIN hotels h ON r.hotel_id = h.hotel_id
+    WHERE h.hotel_id = hotelID AND r.room_number = roomNumber;
+    INSERT INTO reservations (guest_id, room_id, check_in_date, check_out_date) 
+    VALUES (guestID, roomID, checkInDate, checkOutDate);
+END$$
+DELIMITER ;
+
+
+
+
+
+Завдання 5: Процедура для створення графіка прибирань в номерах
+
+DELIMITER $$
+CREATE PROCEDURE ScheduleCleaning()
+BEGIN
+    DECLARE done INT DEFAULT FALSE;
+    DECLARE reservationID INT;
+    DECLARE roomID INT;
+    DECLARE checkIn DATE;
+    DECLARE checkOut DATE;
+    DECLARE curDate DATE;
+    DECLARE curDay INT;
+    DECLARE reservationsCursor CURSOR FOR
+        SELECT reservation_id, room_id, check_in_date, check_out_date 
+        FROM reservations 
+        WHERE check_out_date >= CURDATE();  
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+    OPEN reservationsCursor;
+    read_loop: LOOP
+        FETCH reservationsCursor INTO reservationID, roomID, checkIn, checkOut;
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+        SET curDate = checkIn;
+        WHILE curDate <= checkOut DO
+            SET curDay = DAYOFWEEK(curDate);
+            IF curDay != 1 THEN
+                INSERT INTO cleaning_schedule (reservation_id, room_id, cleaning_date)
+                VALUES (reservationID, roomID, curDate);
+            END IF;
+            SET curDate = DATE_ADD(curDate, INTERVAL 2 DAY);
+        END WHILE;
+    END LOOP;
+    CLOSE reservationsCursor;
+END$$
+DELIMITER ;
+
+
+
+
+
+CREATE TABLE cleaning_schedule (
+    cleaning_id INT AUTO_INCREMENT PRIMARY KEY,
+    reservation_id INT,
+    room_id INT,
+    cleaning_date DATE,
+    FOREIGN KEY (reservation_id) REFERENCES reservations(reservation_id),
+    FOREIGN KEY (room_id) REFERENCES rooms(room_id)
+);
